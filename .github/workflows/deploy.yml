@@ -23,8 +23,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run build
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
         env:
           VITE_BASE_PATH: /workout/
       - uses: actions/upload-pages-artifact@v3
