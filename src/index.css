@@ -205,6 +205,13 @@ a {
   color: var(--accent);
 }
 
+button.text-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -257,6 +264,11 @@ a {
   color: var(--ink);
 }
 
+.btn--small {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.9rem;
+}
+
 .btn--danger {
   color: var(--danger);
 }
@@ -284,10 +296,15 @@ a {
 }
 
 .routine-list li > div,
-.history-list li {
+.history-list li > div {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  min-width: 0;
+}
+
+.history-list__export {
+  flex-shrink: 0;
 }
 
 .routine-cards {
