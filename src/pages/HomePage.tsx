@@ -1,14 +1,48 @@
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
+import { downloadTextFile } from '../lib/download'
+import {
+  formatWorkoutMarkdown,
+  workoutMarkdownFilename,
+} from '../lib/markdown'
 import { useStore } from '../store'
+import type { WorkoutSession } from '../types'
+
+const RECENT_LIMIT = 5
 
 export function HomePage() {
   const navigate = useNavigate()
-  const { routines, activeSession, sessions, startWorkout } = useStore()
-  const recent = [...sessions]
+  const { routines, activeSession, sessions, startWorkout, getExercise } =
+    useStore()
+  const [showAllRecent, setShowAllRecent] = useState(false)
+  const [exportedId, setExportedId] = useState<string | null>(null)
+  const exportTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (exportTimer.current !== null) window.clearTimeout(exportTimer.current)
+    }
+  }, [])
+  const completed = [...sessions]
     .filter((s) => s.completedAt)
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
-    .slice(0, 5)
+  const recent = showAllRecent ? completed : completed.slice(0, RECENT_LIMIT)
+
+  function handleExport(session: WorkoutSession) {
+    const markdown = formatWorkoutMarkdown(
+      session,
+      (exerciseId) => getExercise(exerciseId)?.name ?? 'Exercise',
+    )
+    flushSync(() => {
+      setExportedId(session.id)
+    })
+    downloadTextFile(workoutMarkdownFilename(session), markdown)
+    if (exportTimer.current !== null) window.clearTimeout(exportTimer.current)
+    exportTimer.current = window.setTimeout(() => {
+      setExportedId((current) => (current === session.id ? null : current))
+    }, 2000)
+  }
 
   function handleStart(routineId: string) {
     flushSync(() => {
@@ -86,10 +120,21 @@ export function HomePage() {
         )}
       </section>
 
-      {recent.length > 0 && (
+      {completed.length > 0 && (
         <section className="section">
           <div className="section__head">
             <h2>Recent</h2>
+            {completed.length > RECENT_LIMIT && (
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => setShowAllRecent((open) => !open)}
+              >
+                {showAllRecent
+                  ? 'Show recent'
+                  : `Show all ${completed.length}`}
+              </button>
+            )}
           </div>
           <ul className="history-list">
             {recent.map((session) => {
@@ -97,13 +142,24 @@ export function HomePage() {
                 (n, e) => n + e.sets.length,
                 0,
               )
+              const exported = exportedId === session.id
               return (
                 <li key={session.id}>
-                  <strong>{session.routineName}</strong>
-                  <span className="muted">
-                    {new Date(session.completedAt!).toLocaleDateString()} ·{' '}
-                    {setCount} sets
-                  </span>
+                  <div>
+                    <strong>{session.routineName}</strong>
+                    <span className="muted">
+                      {new Date(session.completedAt!).toLocaleDateString()} ·{' '}
+                      {setCount} sets
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small history-list__export"
+                    aria-label={`Export ${session.routineName} as markdown`}
+                    onClick={() => handleExport(session)}
+                  >
+                    {exported ? 'Exported' : 'Export'}
+                  </button>
                 </li>
               )
             })}
