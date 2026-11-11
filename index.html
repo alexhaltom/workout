@@ -5,9 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#ff4d00" />
+    <meta name="theme-color" content="#090b0f" />
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        var t = localStorage.getItem('set-theme') || 'dark';
+        document.documentElement.dataset.theme = t;
+        var light = t === 'light' || (t === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+        document.querySelector('meta[name="theme-color"]').content = light ? '#f4f1eb' : '#090b0f';
+      } catch (e) {}
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SET." />
     <meta
       name="description"
