@@ -15,6 +15,7 @@ export function Layout() {
             Home
           </NavLink>
           <NavLink to="/routines">Routines</NavLink>
+          <NavLink to="/coach">Coach</NavLink>
           <NavLink to="/stats">Stats</NavLink>
           {activeSession && (
             <NavLink to="/workout" className="nav__live">
