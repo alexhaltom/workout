@@ -16,8 +16,8 @@ export default defineConfig({
         short_name: 'SET.',
         description:
           'Build routines, log sets, rest between lifts, and track personal bests.',
-        theme_color: '#ff4d00',
-        background_color: '#cfd5d8',
+        theme_color: '#090b0f',
+        background_color: '#090b0f',
         display: 'standalone',
         orientation: 'portrait',
         start_url: './',
