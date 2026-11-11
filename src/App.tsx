@@ -1,6 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { CoachPage } from './pages/CoachPage'
 import { HomePage } from './pages/HomePage'
+import { ImportPage } from './pages/ImportPage'
+import { ResultsPage } from './pages/ResultsPage'
 import { RoutineEditPage } from './pages/RoutineEditPage'
 import { RoutinesPage } from './pages/RoutinesPage'
 import { StatsPage } from './pages/StatsPage'
@@ -21,6 +24,9 @@ export default function App() {
             <Route path="routines/:id" element={<RoutineEditPage />} />
             <Route path="stats" element={<StatsPage />} />
             <Route path="workout" element={<WorkoutPage />} />
+            <Route path="coach" element={<CoachPage />} />
+            <Route path="import" element={<ImportPage />} />
+            <Route path="results/:id" element={<ResultsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

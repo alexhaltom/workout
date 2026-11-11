@@ -1,4 +1,9 @@
-import type { WorkoutSession } from '../types'
+import type {
+  PlannedSet,
+  SessionExercise,
+  SetEntry,
+  WorkoutSession,
+} from '../types'
 
 export type ExerciseNameLookup = (exerciseId: string) => string
 
@@ -80,17 +85,40 @@ export function workoutMarkdownFilename(session: WorkoutSession): string {
   return `${slug || 'workout'}-${date}-${time}.md`
 }
 
+export type WorkoutMarkdownOptions = {
+  /** Shift heading levels, e.g. 1 to nest a workout under a week summary. */
+  headingOffset?: number
+}
+
+function formatTarget(set: PlannedSet): string {
+  return `${set.weight === 0 ? 'BW' : formatAmount(set.weight)} × ${formatAmount(set.reps)}`
+}
+
+function setResult(target: PlannedSet | undefined, actual: SetEntry | undefined): string {
+  if (!actual) return 'not done'
+  if (!target) return 'extra'
+  if (actual.weight >= target.weight && actual.reps >= target.reps) {
+    return actual.weight > target.weight || actual.reps > target.reps
+      ? 'beat target'
+      : 'hit'
+  }
+  return 'below target'
+}
+
 export function formatWorkoutMarkdown(
   session: WorkoutSession,
   exerciseName: ExerciseNameLookup,
+  options: WorkoutMarkdownOptions = {},
 ): string {
+  const h = (level: number) => '#'.repeat(Math.min(6, level + (options.headingOffset ?? 0)))
   const finishedAt = session.completedAt ?? session.startedAt
   const duration = session.completedAt
     ? formatDuration(session.startedAt, session.completedAt)
     : null
+  const unitLabel = session.units ? ` (${session.units})` : ''
 
   const lines: string[] = [
-    `# ${headingText(session.routineName, 'Workout')}`,
+    `${h(1)} ${headingText(session.planDayLabel ?? session.routineName, 'Workout')}`,
     '',
     formatDate(finishedAt),
     '',
@@ -99,52 +127,78 @@ export function formatWorkoutMarkdown(
   ]
 
   if (duration) lines.push(`- Duration: ${duration}`)
+  if (session.units) lines.push(`- Units: ${session.units}`)
   lines.push('')
 
-  const logged = session.exercises.filter((exercise) => exercise.sets.length > 0)
-  const skipped = session.exercises.filter((exercise) => exercise.sets.length === 0)
+  const hasWork = (exercise: SessionExercise) =>
+    exercise.sets.length > 0 || (exercise.targets?.length ?? 0) > 0
+  const logged = session.exercises.filter(hasWork)
+  const skipped = session.exercises.filter((exercise) => !hasWork(exercise))
 
   let totalSets = 0
   let totalVolume = 0
+  let plannedSets = 0
+  let plannedHit = 0
 
   if (logged.length === 0) {
     lines.push('_No sets logged._', '')
   } else {
     for (const exercise of logged) {
-      const name = headingText(
-        exerciseName(exercise.exerciseId),
-        'Exercise',
-      )
-      lines.push(`## ${name}`, '')
-      lines.push(
-        '| Set | Weight | Reps | Logged |',
-        '| --- | ---: | ---: | --- |',
-      )
-      exercise.sets.forEach((set, index) => {
+      const name = headingText(exerciseName(exercise.exerciseId), 'Exercise')
+      lines.push(`${h(2)} ${name}`, '')
+      if (exercise.note) lines.push(`> Coach note: ${oneLine(exercise.note)}`, '')
+
+      for (const set of exercise.sets) {
         totalSets += 1
         totalVolume += set.weight * set.reps
+      }
+
+      const targets = exercise.targets ?? []
+      if (targets.length > 0) {
         lines.push(
-          `| ${index + 1} | ${formatAmount(set.weight)} | ${formatAmount(set.reps)} | ${escapeCell(formatSetTime(set.completedAt))} |`,
+          `| Set | Target | Weight${unitLabel} | Reps | Result |`,
+          '| --- | --- | ---: | ---: | --- |',
         )
-      })
+        const rows = Math.max(targets.length, exercise.sets.length)
+        for (let index = 0; index < rows; index += 1) {
+          const target = targets[index]
+          const actual = exercise.sets[index]
+          const result = setResult(target, actual)
+          if (target) {
+            plannedSets += 1
+            if (result === 'hit' || result === 'beat target') plannedHit += 1
+          }
+          lines.push(
+            `| ${index + 1} | ${target ? formatTarget(target) : '—'} | ${actual ? formatAmount(actual.weight) : '—'} | ${actual ? formatAmount(actual.reps) : '—'} | ${result} |`,
+          )
+        }
+      } else {
+        lines.push(
+          `| Set | Weight${unitLabel} | Reps | Logged |`,
+          '| --- | ---: | ---: | --- |',
+        )
+        exercise.sets.forEach((set, index) => {
+          lines.push(
+            `| ${index + 1} | ${formatAmount(set.weight)} | ${formatAmount(set.reps)} | ${escapeCell(formatSetTime(set.completedAt))} |`,
+          )
+        })
+      }
       lines.push('')
     }
 
     if (skipped.length > 0) {
       const names = skipped
-        .map((exercise) =>
-          headingText(exerciseName(exercise.exerciseId), 'Exercise'),
-        )
+        .map((exercise) => headingText(exerciseName(exercise.exerciseId), 'Exercise'))
         .join(', ')
       lines.push(`_Skipped: ${names}_`, '')
     }
 
-    lines.push(
-      '---',
-      '',
-      `${totalSets} ${totalSets === 1 ? 'set' : 'sets'} · volume ${formatAmount(totalVolume)}`,
-      '',
-    )
+    const summary = [
+      `${totalSets} ${totalSets === 1 ? 'set' : 'sets'}`,
+      `volume ${formatAmount(totalVolume)}${session.units ? ` ${session.units}` : ''}`,
+    ]
+    if (plannedSets > 0) summary.push(`planned sets hit ${plannedHit}/${plannedSets}`)
+    lines.push('---', '', summary.join(' · '), '')
   }
 
   return lines.join('\n')

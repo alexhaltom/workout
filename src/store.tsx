@@ -9,13 +9,18 @@ import {
 } from 'react'
 import { createId } from './lib/id'
 import { getPersonalBest } from './lib/personalBest'
+import type { ParsedPlan } from './lib/planFormat'
+import { applyPlan, planProgress, type ImportMode } from './lib/planImport'
 import { loadData, saveData } from './lib/storage'
 import type {
   AppData,
+  CoachProfile,
   Exercise,
   PersonalBest,
   Routine,
   SetEntry,
+  Units,
+  WeeklyPlan,
   WorkoutSession,
 } from './types'
 
@@ -25,6 +30,8 @@ type StoreValue = {
   routines: Routine[]
   sessions: WorkoutSession[]
   activeSession: WorkoutSession | null
+  plan: WeeklyPlan | null
+  units: Units
   getExercise: (id: string) => Exercise | undefined
   getRoutine: (id: string) => Routine | undefined
   getPb: (exerciseId: string) => PersonalBest | null
@@ -35,7 +42,12 @@ type StoreValue = {
     exerciseIds: string[]
   }) => Routine
   deleteRoutine: (id: string) => void
-  startWorkout: (routineId: string) => WorkoutSession
+  /** Starts a routine; uses the given plan day, or the first unfinished one for this routine. */
+  startWorkout: (routineId: string, planDayId?: string) => WorkoutSession
+  importPlan: (parsed: ParsedPlan, mode: ImportMode) => void
+  clearPlan: () => void
+  setUnits: (units: Units) => void
+  setProfile: (profile: CoachProfile) => void
   addSet: (
     exerciseId: string,
     reps: number,
@@ -124,22 +136,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const startWorkout = useCallback(
-    (routineId: string) => {
+    (routineId: string, planDayId?: string) => {
       const routine = data.routines.find((r) => r.id === routineId)
-      if (!routine) {
+      const plan = data.plan
+      const progress = planProgress(plan, data.sessions)
+      const day = planDayId
+        ? plan?.days.find((d) => d.id === planDayId)
+        : progress.find((d) => !d.session && d.day.routineId === routineId)?.day
+
+      if (!routine && !day) {
         throw new Error('Routine not found')
       }
 
       const session: WorkoutSession = {
         id: createId(),
-        routineId: routine.id,
-        routineName: routine.name,
+        routineId,
+        routineName: routine?.name ?? day!.name,
         startedAt: new Date().toISOString(),
         completedAt: null,
-        exercises: routine.exerciseIds.map((exerciseId) => ({
-          exerciseId,
-          sets: [],
-        })),
+        units: data.units,
+        exercises: day
+          ? day.exercises.map((ex) => ({
+              exerciseId: ex.exerciseId,
+              sets: [],
+              targets: ex.sets,
+              ...(ex.note ? { note: ex.note } : {}),
+            }))
+          : routine!.exerciseIds.map((exerciseId) => ({
+              exerciseId,
+              sets: [],
+            })),
+        ...(day && plan
+          ? { planId: plan.id, planDayId: day.id, planDayLabel: day.label }
+          : {}),
       }
 
       setData((prev) => ({
@@ -150,8 +179,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       return session
     },
-    [data.routines],
+    [data.routines, data.plan, data.sessions, data.units],
   )
+
+  const importPlan = useCallback((parsed: ParsedPlan, mode: ImportMode) => {
+    setData((prev) => applyPlan(prev, parsed, mode))
+  }, [])
+
+  const clearPlan = useCallback(() => {
+    setData((prev) => ({ ...prev, plan: null }))
+  }, [])
+
+  const setUnits = useCallback((units: Units) => {
+    setData((prev) => ({ ...prev, units }))
+  }, [])
+
+  const setProfile = useCallback((profile: CoachProfile) => {
+    setData((prev) => ({ ...prev, profile }))
+  }, [])
 
   const addSet = useCallback(
     (exerciseId: string, reps: number, weight: number) => {
@@ -226,6 +271,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       routines: data.routines,
       sessions: data.sessions,
       activeSession,
+      plan: data.plan,
+      units: data.units,
       getExercise,
       getRoutine,
       getPb,
@@ -233,6 +280,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       upsertRoutine,
       deleteRoutine,
       startWorkout,
+      importPlan,
+      clearPlan,
+      setUnits,
+      setProfile,
       addSet,
       finishWorkout,
       cancelWorkout,
@@ -247,6 +298,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       upsertRoutine,
       deleteRoutine,
       startWorkout,
+      importPlan,
+      clearPlan,
+      setUnits,
+      setProfile,
       addSet,
       finishWorkout,
       cancelWorkout,

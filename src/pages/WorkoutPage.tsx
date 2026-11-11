@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { RestTimer } from '../components/RestTimer'
 import { useStore } from '../store'
@@ -12,6 +12,7 @@ export function WorkoutPage() {
     addSet,
     finishWorkout,
     cancelWorkout,
+    units,
   } = useStore()
 
   const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null)
@@ -19,10 +20,18 @@ export function WorkoutPage() {
   const [weight, setWeight] = useState('')
   const [timerKey, setTimerKey] = useState<string | null>(null)
   const [justLogged, setJustLogged] = useState(false)
+  const prefilledFor = useRef<string | null>(null)
+  const finishing = useRef(false)
+
+  const currentExercise = activeSession?.exercises.find(
+    (e) => e.exerciseId === activeExerciseId,
+  )
+  const loggedCount = currentExercise?.sets.length ?? 0
+  const nextTarget = currentExercise?.targets?.[loggedCount] ?? null
 
   useEffect(() => {
     if (!activeSession) {
-      navigate('/')
+      if (!finishing.current) navigate('/')
       return
     }
     if (!activeExerciseId) {
@@ -32,11 +41,21 @@ export function WorkoutPage() {
 
   useEffect(() => {
     if (!activeExerciseId || !activeSession) return
+    const switched = prefilledFor.current !== activeExerciseId
+    prefilledFor.current = activeExerciseId
+
+    // Planned sets: prefill the next target on lift switch and after each set.
+    if (nextTarget) {
+      setWeight(String(nextTarget.weight))
+      setReps(String(nextTarget.reps))
+      if (switched) setJustLogged(false)
+      return
+    }
+    // Otherwise prefill only when switching lifts, not after every logged set.
+    if (!switched) return
+
     const pb = getPb(activeExerciseId)
-    const current = activeSession.exercises.find(
-      (e) => e.exerciseId === activeExerciseId,
-    )
-    const lastInSession = current?.sets[current.sets.length - 1]
+    const lastInSession = currentExercise?.sets[currentExercise.sets.length - 1]
 
     if (lastInSession) {
       setWeight(String(lastInSession.weight))
@@ -49,9 +68,8 @@ export function WorkoutPage() {
       setReps('')
     }
     setJustLogged(false)
-    // Prefill only when switching lifts, not after every logged set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeExerciseId])
+  }, [activeExerciseId, loggedCount])
 
   if (!activeSession || !activeExerciseId) {
     return null
@@ -78,8 +96,10 @@ export function WorkoutPage() {
   }
 
   function handleFinish() {
+    const sessionId = activeSession!.id
+    finishing.current = true
     finishWorkout()
-    navigate('/')
+    navigate(`/results/${sessionId}`)
   }
 
   function handleCancel() {
@@ -94,7 +114,7 @@ export function WorkoutPage() {
       <div className="page__header">
         <div>
           <p className="eyebrow">In session</p>
-          <h1>{activeSession.routineName}</h1>
+          <h1>{activeSession.planDayLabel ?? activeSession.routineName}</h1>
           <p className="muted">
             Started{' '}
             {new Date(activeSession.startedAt).toLocaleTimeString([], {
@@ -129,7 +149,11 @@ export function WorkoutPage() {
                   >
                     <span className="workout-nav__n">{index + 1}</span>
                     <span className="workout-nav__name">{name}</span>
-                    <span className="workout-nav__sets">{ex.sets.length}</span>
+                    <span className="workout-nav__sets">
+                      {ex.targets?.length
+                        ? `${ex.sets.length}/${ex.targets.length}`
+                        : ex.sets.length}
+                    </span>
                   </button>
                 </li>
               )
@@ -149,9 +173,29 @@ export function WorkoutPage() {
             )}
           </div>
 
+          {activeExercise?.note && (
+            <p className="coach-note">Coach: {activeExercise.note}</p>
+          )}
+
+          {(activeExercise?.targets?.length ?? 0) > 0 && (
+            <p className={`target-line ${nextTarget ? '' : 'target-line--done'}`}>
+              {nextTarget ? (
+                <>
+                  Target · set {loggedCount + 1} of {activeExercise!.targets!.length}:{' '}
+                  <strong>
+                    {nextTarget.weight === 0 ? 'BW' : `${nextTarget.weight} ${units}`} ×{' '}
+                    {nextTarget.reps}
+                  </strong>
+                </>
+              ) : (
+                <>All {activeExercise!.targets!.length} planned sets done ✓</>
+              )}
+            </p>
+          )}
+
           <form className="set-form" onSubmit={handleLogSet}>
             <label className="field">
-              <span>Weight</span>
+              <span>Weight ({units})</span>
               <input
                 inputMode="decimal"
                 value={weight}
@@ -173,7 +217,7 @@ export function WorkoutPage() {
             </button>
           </form>
 
-          {pb && !justLogged && (activeExercise?.sets.length ?? 0) === 0 && (
+          {pb && !justLogged && !activeExercise?.targets?.length && (activeExercise?.sets.length ?? 0) === 0 && (
             <p className="hint">
               Suggested from your PB: {pb.weight} × {pb.reps}
             </p>
